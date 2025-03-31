@@ -98,7 +98,8 @@ def _format_json_schema_to_gapic_v1(schema: Dict[str, Any]) -> Dict[str, Any]:
                 )
             return _format_json_schema_to_gapic_v1(value[0])
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
-            logger.warning(f"Key '{key}' is not supported in schema, ignoring")
+            continue
+            # logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
             converted_schema[key] = value
     return converted_schema
@@ -148,7 +149,8 @@ def _format_json_schema_to_gapic(
                     required_fields.remove(parent_key)
                 continue
         elif key not in _ALLOWED_SCHEMA_FIELDS_SET:
-            logger.warning(f"Key '{key}' is not supported in schema, ignoring")
+            continue
+        #     logger.warning(f"Key '{key}' is not supported in schema, ignoring")
         else:
             converted_schema[key] = value
     return converted_schema
@@ -220,12 +222,9 @@ def _format_dict_to_function_declaration(
     tool: Union[FunctionDescription, Dict[str, Any]],
 ) -> gapic.FunctionDeclaration:
     # Ensure we send "anyOf" parameters through pydantic v2 schema parsing
-    pydantic_version = None
-    if isinstance(tool, dict):
-        properties = tool.get("parameters", {}).get("properties", {}).values()
-        for property in properties:
-            if "anyOf" in property:
-                pydantic_version = "v2"
+    properties = tool.get("parameters", {}).get("properties", {})
+    pydantic_version = "v2" if _dict_is_pydantic_2_model(properties) else None
+
     if pydantic_version:
         parameters = _dict_to_gapic_schema(
             tool.get("parameters", {}), pydantic_version=pydantic_version
@@ -473,3 +472,23 @@ def _tool_choice_to_tool_config(
         )
     )
     return _format_tool_config(tool_config)
+
+def _dict_is_pydantic_2_model(dictionary: dict):
+    if not isinstance(dictionary, dict):
+        return False
+
+    for key, value in dictionary.items():
+        if key == "anyOf":
+            return True
+
+        if isinstance(value, dict):
+            if _dict_is_pydantic_2_model(value):
+                return True
+
+        elif isinstance(value, list):
+            for item in value:
+                # If the item is a dictionary, recursively check it
+                if isinstance(item, dict):
+                    if _dict_is_pydantic_2_model(item):
+                        return True
+
